@@ -2,21 +2,21 @@ import { END, START, StateGraph } from "@langchain/langgraph";
 import { GraphConfiguration } from "@openswe/shared/open-swe/types";
 import { ManagerGraphStateObj } from "@openswe/shared/open-swe/manager/types";
 import {
-  initializeGithubIssue,
+  initializeIssue,
   classifyMessage,
   startPlanner,
   createNewSession,
 } from "./nodes/index.js";
 
 const workflow = new StateGraph(ManagerGraphStateObj, GraphConfiguration)
-  .addNode("initialize-github-issue", initializeGithubIssue)
+  .addNode("initialize-issue", initializeIssue)
   .addNode("classify-message", classifyMessage, {
     ends: [END, "start-planner", "create-new-session"],
   })
   .addNode("create-new-session", createNewSession)
   .addNode("start-planner", startPlanner)
-  .addEdge(START, "initialize-github-issue")
-  .addEdge("initialize-github-issue", "classify-message")
+  .addEdge(START, "initialize-issue")
+  .addEdge("initialize-issue", "classify-message")
   .addEdge("create-new-session", END)
   .addEdge("start-planner", END);
 

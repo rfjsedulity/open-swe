@@ -15,6 +15,15 @@ export const ManagerGraphStateObj = MessagesZodState.extend({
    */
   githubPullRequestId: z.number().optional(),
   /**
+   * The Linear issue ID that the user's request is associated with.
+   * Used when issueTracker is set to "linear".
+   */
+  linearIssueId: z.string().optional(),
+  /**
+   * Linear workspace and team context
+   */
+  linearWorkspace: z.custom<{workspaceId: string, teamId?: string}>().optional(),
+  /**
    * The target repository the request should be executed in.
    */
   targetRepository: z.custom<TargetRepository>(),

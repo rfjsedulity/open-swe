@@ -25,6 +25,12 @@ export const PROGRAMMER_GRAPH_ID = "programmer";
 export const GITHUB_USER_ID_HEADER = "x-github-user-id";
 export const GITHUB_USER_LOGIN_HEADER = "x-github-user-login";
 
+// Linear Integration Constants
+export const LINEAR_API_KEY = "x-linear-api-key";
+export const LINEAR_WORKSPACE_ID = "x-linear-workspace-id";
+export const LINEAR_WEBHOOK_SECRET = "x-linear-webhook-secret";
+export const LINEAR_TEAM_ID = "x-linear-team-id";
+
 export const DEFAULT_MCP_SERVERS = {
   "langgraph-docs-mcp": {
     command: "uvx",

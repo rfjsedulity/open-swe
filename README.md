@@ -40,8 +40,17 @@ Open SWE can be used in multiple ways:
 
 - 🖥️ **From the UI**. You can create, manage and execute Open SWE tasks from the [web application](https://swe.langchain.com). See the ['From the UI' page](https://docs.langchain.com/labs/swe/usage/ui) in the docs for more information.
 - 📝 **From GitHub**. You can start Open SWE tasks directly from GitHub issues simply by adding a label `open-swe`, or `open-swe-auto` (adding `-auto` will cause Open SWE to automatically accept the plan, requiring no intervention from you). For enhanced performance on complex tasks, use `open-swe-max` or `open-swe-max-auto` labels which utilize Claude Opus 4.1 for both planning and programming. See the ['From GitHub' page](https://docs.langchain.com/labs/swe/usage/github) in the docs for more information.
+- 📋 **From Linear**. You can also start Open SWE tasks directly from Linear issues using the same label system (`open-swe`, `open-swe-auto`, `open-swe-max`, `open-swe-max-auto`). Linear's native GitHub integration automatically links the resulting pull requests back to your Linear issues. Configure the issue tracker in your Open SWE settings to choose between GitHub and Linear.
+
+### Issue Tracker Selection
+
+Open SWE supports both GitHub Issues and Linear as issue tracking platforms:
+
+- **GitHub Issues** (default): Traditional GitHub-based workflow with direct issue creation and PR linking
+- **Linear**: Modern issue tracking with native GitHub integration, automatic PR linking, and enhanced project management features
+
+You can configure your preferred issue tracker in the Open SWE web interface under settings, or via the `issueTracker` configuration option when using the API.
 
 # Documentation
 
 To get started using Open SWE locally, see the [documentation here](https://docs.langchain.com/labs/swe/).
-
