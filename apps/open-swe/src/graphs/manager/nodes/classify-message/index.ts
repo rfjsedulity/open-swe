@@ -23,6 +23,7 @@ import {
   createIssueComment,
 } from "../../../../utils/github/api.js";
 import { getGitHubTokensFromConfig } from "../../../../utils/github-tokens.js";
+import { LINEAR_API_KEY } from "@openswe/shared/constants";
 import { createIssueFieldsFromMessages } from "../../utils/generate-issue-fields.js";
 import {
   extractContentWithoutDetailsFromIssueBody,
@@ -220,50 +221,61 @@ export async function classifyMessage(
     );
   }
 
+  // Determine if we're using Linear or GitHub
+  const issueTracker = config.configurable?.issueTracker || 'github';
+  const isLinearMode = issueTracker === 'linear';
+
   const { githubAccessToken } = getGitHubTokensFromConfig(config);
   let githubIssueId = state.githubIssueId;
+  let linearIssueId = state.linearIssueId;
 
   const newMessages: BaseMessage[] = [response];
 
-  // If it's not a no_op, ensure there is a GitHub issue with the user's request.
-  if (!githubIssueId) {
-    const { title } = await createIssueFieldsFromMessages(
-      state.messages,
-      config.configurable,
-    );
-    const { content: body } = extractIssueTitleAndContentFromMessage(
-      getMessageContentString(userMessage.content),
-    );
+  // If it's not a no_op, ensure there is an issue with the user's request.
+  if (!githubIssueId && !linearIssueId) {
+    if (isLinearMode) {
+      // For Linear mode, we don't create issues here - they should already exist from webhook
+      throw new Error("Linear issue ID not provided - Linear issues should be created via webhook");
+    } else {
+      // GitHub mode - create GitHub issue
+      const { title } = await createIssueFieldsFromMessages(
+        state.messages,
+        config.configurable,
+      );
+      const { content: body } = extractIssueTitleAndContentFromMessage(
+        getMessageContentString(userMessage.content),
+      );
 
-    const newIssue = await createIssue({
-      owner: state.targetRepository.owner,
-      repo: state.targetRepository.repo,
-      title,
-      body: formatContentForIssueBody(body),
-      githubAccessToken,
-    });
-    if (!newIssue) {
-      throw new Error("Failed to create issue.");
+      const newIssue = await createIssue({
+        owner: state.targetRepository.owner,
+        repo: state.targetRepository.repo,
+        title,
+        body: formatContentForIssueBody(body),
+        githubAccessToken,
+      });
+      if (!newIssue) {
+        throw new Error("Failed to create issue.");
+      }
+      githubIssueId = newIssue.number;
+      // Ensure we remove the old message, and replace it with an exact copy,
+      // but with the issue ID & isOriginalIssue set in additional_kwargs.
+      newMessages.push(
+        ...[
+          new RemoveMessage({
+            id: userMessage.id ?? "",
+          }),
+          new HumanMessage({
+            ...userMessage,
+            additional_kwargs: {
+              githubIssueId: githubIssueId,
+              isOriginalIssue: true,
+            },
+          }),
+        ],
+      );
     }
-    githubIssueId = newIssue.number;
-    // Ensure we remove the old message, and replace it with an exact copy,
-    // but with the issue ID & isOriginalIssue set in additional_kwargs.
-    newMessages.push(
-      ...[
-        new RemoveMessage({
-          id: userMessage.id ?? "",
-        }),
-        new HumanMessage({
-          ...userMessage,
-          additional_kwargs: {
-            githubIssueId: githubIssueId,
-            isOriginalIssue: true,
-          },
-        }),
-      ],
-    );
   } else if (
-    githubIssueId &&
+    (githubIssueId && !isLinearMode) &&
     state.messages.filter(isHumanMessage).length > 1
   ) {
     // If there already is a GitHub issue ID in state, and multiple human messages, add any
@@ -363,6 +375,113 @@ export async function classifyMessage(
       update: commandUpdate,
       goto,
     });
+  } else if (
+    (linearIssueId && isLinearMode) &&
+    state.messages.filter(isHumanMessage).length > 1
+  ) {
+    // Linear equivalent: If there already is a Linear issue ID in state, and multiple human messages, add any
+    // human messages to the Linear issue which weren't already added.
+    const linearApiKey = config.configurable?.[LINEAR_API_KEY];
+    if (!linearApiKey) {
+      throw new Error("Linear API key not provided");
+    }
+
+    // Use require to avoid TypeScript module resolution issues
+    const { LinearClient } = require("../../../../utils/linear/client.js");
+    const linearClient = new LinearClient(linearApiKey);
+
+    const messagesNotInIssue = state.messages
+      .filter(isHumanMessage)
+      .filter((message) => {
+        // If the message doesn't contain `linearIssueId` in additional kwargs, it hasn't been added to the issue.
+        return !message.additional_kwargs?.linearIssueId;
+      });
+
+    const createLinearCommentsPromise = messagesNotInIssue.map(async (message) => {
+      const createdComment = await linearClient.createComment(
+        linearIssueId,
+        getMessageContentString(message.content)
+      );
+      if (!createdComment?.id) {
+        throw new Error("Failed to create Linear comment");
+      }
+      newMessages.push(
+        ...[
+          new RemoveMessage({
+            id: message.id ?? "",
+          }),
+          new HumanMessage({
+            ...message,
+            additional_kwargs: {
+              linearIssueId,
+              linearCommentId: createdComment.id,
+              ...((toolCallArgs.route as string) ===
+              "start_planner_for_followup"
+                ? {
+                    isFollowup: true,
+                  }
+                : {}),
+            },
+          }),
+        ],
+      );
+    });
+
+    await Promise.all(createLinearCommentsPromise);
+
+    let newPlannerId: string | undefined;
+    let goto = END;
+
+    if (plannerStatus === "interrupted") {
+      if (!state.plannerSession?.threadId) {
+        throw new Error("No planner session found. Unable to resume planner.");
+      }
+      // We need to resume the planner session via a 'response' so that it can re-plan
+      const plannerResume: HumanResponse = {
+        type: "response",
+        args: "resume planner",
+      };
+      logger.info("Resuming planner session");
+      if (!langGraphClient) {
+        throw new Error("LangGraph client not initialized");
+      }
+      const newPlannerRun = await langGraphClient.runs.create(
+        state.plannerSession?.threadId,
+        PLANNER_GRAPH_ID,
+        {
+          command: {
+            resume: plannerResume,
+          },
+          streamMode: OPEN_SWE_STREAM_MODE as StreamMode[],
+        },
+      );
+      newPlannerId = newPlannerRun.run_id;
+      logger.info("Planner session resumed", {
+        runId: newPlannerRun.run_id,
+        threadId: state.plannerSession.threadId,
+      });
+    }
+
+    if (toolCallArgs.route === "start_planner_for_followup") {
+      goto = "start-planner";
+    }
+
+    // After creating the new comment, we can add the message to state and end.
+    const commandUpdate: ManagerGraphUpdate = {
+      messages: newMessages,
+      ...(newPlannerId && state.plannerSession?.threadId
+        ? {
+            plannerSession: {
+              threadId: state.plannerSession.threadId,
+              runId: newPlannerId,
+            },
+          }
+        : {}),
+    };
+    return new Command({
+      update: commandUpdate,
+      goto,
+    });
   }
 
   // Issue has been created, and any missing human messages have been added to it.
@@ -370,6 +489,7 @@ export async function classifyMessage(
   const commandUpdate: ManagerGraphUpdate = {
     messages: newMessages,
     ...(githubIssueId ? { githubIssueId } : {}),
+    ...(linearIssueId ? { linearIssueId } : {}),
   };
 
   if (

@@ -16,6 +16,10 @@ import {
   GITHUB_USER_LOGIN_HEADER,
   GITHUB_PAT,
   GITHUB_INSTALLATION_ID,
+  LINEAR_API_KEY,
+  LINEAR_WORKSPACE_ID,
+  LINEAR_WEBHOOK_SECRET,
+  LINEAR_TEAM_ID,
 } from "../constants.js";
 import { withLangGraph } from "@langchain/langgraph/zod";
 import { BaseMessage } from "@langchain/core/messages";
@@ -248,6 +252,24 @@ export const GraphAnnotation = MessagesZodState.extend({
     },
   }),
   /**
+   * The ID of the Linear issue this thread is associated with
+   */
+  linearIssueId: withLangGraph(z.custom<string>().optional(), {
+    reducer: {
+      schema: z.custom<string>().optional(),
+      fn: (_state, update) => update,
+    },
+  }),
+  /**
+   * Linear workspace and team context
+   */
+  linearWorkspace: withLangGraph(z.custom<{workspaceId: string, teamId?: string}>().optional(), {
+    reducer: {
+      schema: z.custom<{workspaceId: string, teamId?: string}>().optional(),
+      fn: (_state, update) => update,
+    },
+  }),
+  /**
    * Whether or not the dependencies have been installed already in the sandbox.
    */
   dependenciesInstalled: withLangGraph(z.custom<boolean>(), {
@@ -441,6 +463,17 @@ export const GraphConfigurationMetadata: {
         "Whether or not to create GitHub issues for all requests. Can be overridden on a per-request basis via the 'eye' icon in the chat input area.",
     },
   },
+  issueTracker: {
+    x_open_swe_ui_config: {
+      type: "select",
+      default: "github",
+      description: "Choose the issue tracking platform to integrate with",
+      options: [
+        { value: "github", label: "GitHub Issues" },
+        { value: "linear", label: "Linear Issues" }
+      ],
+    },
+  },
   customFramework: {
     x_open_swe_ui_config: {
       type: "hidden",
@@ -487,6 +520,26 @@ export const GraphConfigurationMetadata: {
     },
   },
   [GITHUB_PAT]: {
+    x_open_swe_ui_config: {
+      type: "hidden",
+    },
+  },
+  [LINEAR_API_KEY]: {
+    x_open_swe_ui_config: {
+      type: "hidden",
+    },
+  },
+  [LINEAR_WORKSPACE_ID]: {
+    x_open_swe_ui_config: {
+      type: "hidden",
+    },
+  },
+  [LINEAR_WEBHOOK_SECRET]: {
+    x_open_swe_ui_config: {
+      type: "hidden",
+    },
+  },
+  [LINEAR_TEAM_ID]: {
     x_open_swe_ui_config: {
       type: "hidden",
     },
@@ -624,6 +677,13 @@ export const GraphConfiguration = z.object({
     metadata: GraphConfigurationMetadata.shouldCreateIssue,
   }),
   /**
+   * The issue tracking platform to integrate with.
+   * @default "github"
+   */
+  issueTracker: withLangGraph(z.enum(["github", "linear"]).optional(), {
+    metadata: GraphConfigurationMetadata.issueTracker,
+  }),
+  /**
    * Whether or not to use the custom framework for the request.
    * @default false
    */
@@ -686,6 +746,30 @@ export const GraphConfiguration = z.object({
    */
   [GITHUB_PAT]: withLangGraph(z.string().optional(), {
     metadata: GraphConfigurationMetadata[GITHUB_PAT],
+  }),
+  /**
+   * Linear API key for accessing Linear's GraphQL API.
+   */
+  [LINEAR_API_KEY]: withLangGraph(z.string().optional(), {
+    metadata: GraphConfigurationMetadata[LINEAR_API_KEY],
+  }),
+  /**
+   * Linear workspace ID for the organization.
+   */
+  [LINEAR_WORKSPACE_ID]: withLangGraph(z.string().optional(), {
+    metadata: GraphConfigurationMetadata[LINEAR_WORKSPACE_ID],
+  }),
+  /**
+   * Linear webhook secret for verifying webhook signatures.
+   */
+  [LINEAR_WEBHOOK_SECRET]: withLangGraph(z.string().optional(), {
+    metadata: GraphConfigurationMetadata[LINEAR_WEBHOOK_SECRET],
+  }),
+  /**
+   * Linear team ID for issue creation and management.
+   */
+  [LINEAR_TEAM_ID]: withLangGraph(z.string().optional(), {
+    metadata: GraphConfigurationMetadata[LINEAR_TEAM_ID],
   }),
   /**
    * Custom MCP servers configuration as JSON string. Merges with default servers.

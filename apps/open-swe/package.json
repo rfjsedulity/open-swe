@@ -33,6 +33,7 @@
     "@langchain/langgraph-sdk": "^0.0.95",
     "@langchain/mcp-adapters": "^0.5.2",
     "@langchain/openai": "^0.5.10",
+    "@linear/sdk": "^58.1.0",
     "@mendable/firecrawl-js": "^1.29.1",
     "@octokit/app": "^16.0.1",
     "@octokit/core": "^7.0.2",
